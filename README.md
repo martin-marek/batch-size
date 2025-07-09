@@ -7,13 +7,16 @@ Official repository for the paper *[Small Batch Size Training for Language Model
 ## Key results
 
 We show that when a small batch size is used, vanilla SGD without momentum is almost as fast as AdamW for LLM pretraining on a per-FLOP basis. In general, we find that as the batch size is reduced, the performance gaps between optimizers shrinks.
-![](figures/accuracy.png)
+
+<img src="https://github.com/martin-marek/batch-size/blob/main/plots/gpt3xl_sgd.png" width="450">
 
 Additionally, small batch sizes are much more robust to hyperparameter mispecification, meaning that when the tuning budget is limited, small batch sizes perform much better in expecation.
-![](figures/optimizer_comp.png)
+
+<img src="https://github.com/martin-marek/batch-size/blob/main/plots/adam_2d.png" width="650">
 
 We hope that our results can be useful for memory-constrained practitioners, since small batch sizes allow the use of simple optimizers. For example, instead of using LoRA for fine-tuning, it might be preferable to do full fine-tuning with a small batch size and a memory-efficient optimizer like Adafactor, matching the performance of Adam while maintaining a similar memory footprint to LoRA.
-![](finetune_bar.png)
+
+<img src="https://github.com/martin-marek/batch-size/blob/main/plots/finetune_bar.png" width="400">
 
 ## Code structure
 
