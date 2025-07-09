@@ -19,4 +19,4 @@ python finetune.py --model_variant='gemma3-1b'
 
 ## Sweeps
 
-We performed our main experiments using Weights & Biases sweeps. The config files for each sweep can be found in the (runs)[runs] directory.
+We performed our main experiments using Weights & Biases sweeps. The config files for each sweep can be found in the [runs](runs) directory.
