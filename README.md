@@ -22,7 +22,7 @@ We hope that our results can be useful for memory-constrained practitioners, sin
 
 We implemented all of our experiments in JAX from scratch, using a mix of data, tensor, and sequence parallelism. We used two independent codebases for [pretraining](pretraining) and [fine-tuning](finetuning). Please refer to either codebase for more details on running experiments.
 
-All of our visualizations were done using Jupyter Notebooks found in the (utils)[utils] directory.
+All of our visualizations were done using Jupyter Notebooks found in the [utils](utils) directory.
 
 ## Citation
 
