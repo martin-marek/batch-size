@@ -6,11 +6,11 @@ Official repository for the paper *[Small Batch Size Training for Language Model
 
 ## Key results
 
-We show that when a small batch size is used, vanilla SGD without momentum is almost as fast as AdamW for LLM pretraining on a per-FLOP basis. In general, we find that as the batch size is reduced, the performance gaps between optimizers shrinks.
+We show that when a small batch size is used, vanilla SGD without momentum converges almost as fast as AdamW for LLM pretraining on a per-FLOP basis. In general, we find that as the batch size is reduced, the performance gap between different optimizers shrinks.
 
 <img src="https://github.com/martin-marek/batch-size/blob/main/plots/gpt3xl_sgd.png" width="450">
 
-Additionally, small batch sizes are much more robust to hyperparameter mispecification, meaning that when the tuning budget is limited, small batch sizes perform much better in expecation.
+Additionally, small batch sizes are much more robust to hyperparameter mispecification, meaning that when the tuning budget is limited, small batch sizes perform better in expecation.
 
 <img src="https://github.com/martin-marek/batch-size/blob/main/plots/adam_2d.png" width="650">
 
@@ -20,7 +20,7 @@ We hope that our results can be useful for memory-constrained practitioners, sin
 
 ## Code structure
 
-We implemented all of our experiments in JAX from scratch, using a mix of data and tensor parallelism. We used two independent codebases for [pretraining](pretraining) and [fine-tuning](finetuning). Please refer to either codebase for more details on running experiments.
+We implemented all of our experiments in JAX from scratch, using a mix of data, tensor, and sequence parallelism. We used two independent codebases for [pretraining](pretraining) and [fine-tuning](finetuning). Please refer to either codebase for more details on running experiments.
 
 All of our visualizations were done using Jupyter Notebooks found in the (utils)[utils] directory.
 
