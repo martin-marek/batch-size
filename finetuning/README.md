@@ -1,6 +1,6 @@
 # Fine-tuning
 
-For our fine-tuning experiments, we implemented Gemma 3 from mostly scratch, including sampling. Our code is loosely based on the (Gemma NNX example)[https://github.com/google/flax/tree/main/examples/gemma].
+For our fine-tuning experiments, we implemented Gemma 3 from mostly scratch, including sampling. Our code is loosely based on the [Gemma NNX example](https://github.com/google/flax/tree/main/examples/gemma).
 
 ## Manual training
 
