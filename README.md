@@ -27,7 +27,7 @@ All of our visualizations were done using Jupyter Notebooks found in the (utils)
 ## Citation
 
 ```bibtex
-@misc{dirclip,
+@misc{smallbatch,
   title={Small Batch Size Training for Language Models: When Vanilla SGD Works, and Why Gradient Accumulation Is Wasteful}, 
   author={Martin Marek and Sanae Lotfi and Aditya Somasundaram and Andrew Gordon Wilson and Micah Goldblum},
   year={2025},
