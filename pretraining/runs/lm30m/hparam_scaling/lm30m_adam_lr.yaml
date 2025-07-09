@@ -1,0 +1,18 @@
+name: lm11m_adam_lr_seeds_1
+method: grid
+parameters:
+  seed:
+    values: [0, 1, 2, 3, 4] # -> 5x
+  opt.batch_size:
+    values: [1, 4, 16, 64, 256, 1024, 4096] # -> 7x
+  +overwrite.opt.peak_lr:
+    values: [0.00020, 0.00030, 0.00046, 0.00070, 0.00106, 0.00161, 0.00245, 0.00372, 0.00565, 0.00857, 0.01301, 0.01976, 0.03000] # -> 13x
+  # total: 5*7*13=455
+program: main.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - +hparams=lm11m_fwedu_adam
+  - opt.max_microbatch_size=16
+  - ${args_no_hyphens}

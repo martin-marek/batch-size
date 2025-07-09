@@ -1,0 +1,16 @@
+name: gpt2s_adafactor_bs1_v3_1
+method: grid
+parameters:
+  opt.peak_lr:
+    values: [0.0003, 0.0006, 0.0012, 0.0025, 0.005, 0.01, 0.02, 0.04] # -> 8x
+program: main.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - +model=gpt2s
+  - +dataset=fw_gpt2
+  - opt.optimizer='adafactor'
+  - opt.batch_size=1
+  - opt.b2=0.9999
+  - ${args_no_hyphens}

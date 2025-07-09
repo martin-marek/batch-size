@@ -1,0 +1,20 @@
+name: lm11m_adam_sensitivity_seeds_1
+method: grid
+parameters:
+  seed:
+    values: [0, 1, 2, 3, 4, 5, 6] # -> 7x
+  opt.batch_size:
+    values: [1, 4, 16, 64, 256, 1024, 4096] # -> 7x
+  +scaling_1d.key:
+    values: ['opt.peak_lr', 'opt.t1', 'opt.t2'] # -> 3x
+  +scaling_1d.value:
+    values: [0.125, 0.177, 0.250, 0.354, 0.500, 0.707, 1.000, 1.414, 2.000, 2.828, 4.000, 5.657, 8.000] # -> 13
+  # total: 7*7*3*13=1911
+program: main.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - +hparams=lm11m_fwedu_adam
+  - opt.max_microbatch_size=16
+  - ${args_no_hyphens}

@@ -1,0 +1,6 @@
+# @package _global_
+
+ds_path: '~/datasets/finewebedu_gpt2.bin'
+
+model:
+  V: 50257

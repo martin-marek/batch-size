@@ -1,0 +1,24 @@
+name: fig10_fixed_b2_v3
+method: grid
+parameters:
+  seed:
+    values: [0, 1, 2, 3, 4] # -> 5x
+  opt.batch_size:
+    values: [16, 32, 64, 128, 256, 512, 1024] # -> 7x
+  opt.peak_lr_scaled:
+    values: [1.6e-6, 3.1e-6, 6.2e-6, 1.25e-5, 2.5e-5, 5.0e-5, 1.0e-4, 2.0e-4, 4.0e-4, 8.0e-4, 1.6e-3, 3.1e-3, 6.2e-3, 1.25e-2, 2.5e-2, 5.0e-2, 1.0e-1, 2.0e-1] # -> 18x
+  # total: 5*7*18=630
+program: main.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - +model=lm19m
+  - +dataset=c4_t5all
+  - opt.optimizer='adamw'
+  - opt.b1=0.9
+  - opt.b2=0.95
+  - opt.weight_decay=0.1
+  - opt.max_microbatch_size=16
+  - opt.peak_lr_scaling='${pow:${opt.batch_size},0.25}'
+  - ${args_no_hyphens}

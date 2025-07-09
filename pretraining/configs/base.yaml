@@ -1,0 +1,48 @@
+defaults:
+  - _self_
+  - override hydra/hydra_logging: disabled
+  - override hydra/job_logging: disabled
+
+seed: 0
+ds_path: null
+tokens_params_ratio: 20 # chinchilla scaling
+num_tokens_train: null
+log_every_tokens: 1_000_000
+num_tokens_valid: 1_000_000
+pad_eval: false
+wandb_project: 'picodo-bs'
+wandb_mode: 'online'
+run_name: null
+num_tp_devices: 1 # optional tensor parallelism
+
+model:
+  D: null # model/embed/qkv dim
+  L: null # num. block layers
+  H: 128 # head dimension
+  F: ${mul:4, ${model.D}} # FF inner dimension = 4 x embed dim.
+  N: ${floordiv:${model.D}, ${model.H}} # num. attention heads
+  T: null # context/sequence length
+  V: null # vocab size -> must match dataset tokenizer!
+  dtype: null
+  remat: false
+  use_flash_attn: true
+
+opt:
+  optimizer: null
+  batch_size: null
+  max_microbatch_size: .inf
+  microbatch_size: ${min:${opt.batch_size}, ${opt.max_microbatch_size}} 
+  grad_acc_steps: ${floordiv:${opt.batch_size}, ${opt.microbatch_size}}
+  peak_lr: null
+  peak_lr_scaled: null
+  peak_lr_scaling: null
+  muon_lr: null
+  warmup_frac: 0.05
+  b1: null
+  b2: null
+  t1: null # units: num. of tokens
+  t2: null # units: num. of tokens
+  muon_b1: null
+  muon_t1: null # units: num. of tokens
+  b2_min: null
+  weight_decay: 0

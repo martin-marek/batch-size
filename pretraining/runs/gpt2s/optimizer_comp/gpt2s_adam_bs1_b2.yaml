@@ -1,0 +1,17 @@
+name: gpt2s_adam_bs1_b2_v3_1
+method: grid
+parameters:
+  opt.peak_lr:
+    values: [0.000075, 0.00015, 0.0003, 0.0006, 0.0012, 0.0024, 0.0048, 0.01] # -> 8x
+program: main.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - +model=gpt2s
+  - +dataset=fw_gpt2
+  - opt.optimizer='adamw'
+  - opt.batch_size=1
+  - opt.b1=0.9
+  - opt.b2=0.95
+  - ${args_no_hyphens}

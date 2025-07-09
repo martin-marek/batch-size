@@ -1,0 +1,21 @@
+name: lm30m_adafactor_grid_1
+method: grid
+parameters:
+  opt.batch_size:
+    values: [1, 4, 16, 64, 256, 1024, 4096] # -> 7x
+  opt.peak_lr_scaled:
+    values: [0.00010, 0.00035, 0.00120, 0.00416, 0.01443, 0.05000] # -> 6x
+  opt.t2:
+    values: [1_000_000, 3_160_000, 10_000_000, 31_600_000, 100_000_000] # -> 5x
+  # total: 7*6*5=210
+program: main.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - +model=lm11m
+  - +dataset=fwedu_gpt2
+  - opt.optimizer='adafactor'
+  - opt.max_microbatch_size=16
+  - opt.peak_lr_scaling='${pow:${opt.batch_size},0.3}'
+  - ${args_no_hyphens}

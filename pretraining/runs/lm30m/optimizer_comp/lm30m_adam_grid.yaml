@@ -1,0 +1,23 @@
+name: lm30m_adam_grid_1
+method: grid
+parameters:
+  opt.batch_size:
+    values: [1, 4, 16, 64, 256, 1024, 4096] # -> 7x
+  opt.peak_lr_scaled:
+    values: [0.00010, 0.00035, 0.00120, 0.00416, 0.01443, 0.05000] # -> 6x
+  opt.b1:
+    values: [0.00000, 0.50000, 0.74655, 0.88403, 0.94935, 0.97832, 0.99080, 0.99611, 0.99836, 0.99931] # -> 10x
+  opt.t2:
+    values: [1_000_000, 3_160_000, 10_000_000, 31_600_000, 100_000_000] # -> 5x
+  # total: 7*6*10*5=2100
+program: main.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - +model=lm11m
+  - +dataset=fwedu_gpt2
+  - opt.optimizer='adamw'
+  - opt.max_microbatch_size=16
+  - opt.peak_lr_scaling='${pow:${opt.batch_size},0.3}'
+  - ${args_no_hyphens}

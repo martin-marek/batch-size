@@ -1,0 +1,47 @@
+# @package _global_
+
+defaults:
+  - /base
+  - /model/lm11m
+  - /dataset/fwedu_gpt2
+  - _self_
+
+bs_configs:
+  bs1:
+    opt:
+      peak_lr: 0.0017
+      t1: 40_000
+      t2: 10_000_000
+  bs4:
+    opt:
+      peak_lr: 0.002
+      t1: 40_000
+      t2: 10_000_000
+  bs16:
+    opt:
+      peak_lr: 0.002
+      t1: 60_000
+      t2: 10_000_000
+  bs64:
+    opt:
+      peak_lr: 0.003
+      t1: 200_000
+      t2: 10_000_000
+  bs256:
+    opt:
+      peak_lr: 0.005
+      t1: 1_000_000
+      t2: 10_000_000
+  bs1024:
+    opt:
+      peak_lr: 0.005
+      t1: 3_000_000
+      t2: 10_000_000
+  bs4096:
+    opt:
+      peak_lr: 0.0025
+      t1: 6_000_000
+      t2: 10_000_000
+
+opt:
+  optimizer: 'adamw'

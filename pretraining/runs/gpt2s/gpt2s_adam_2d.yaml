@@ -1,0 +1,24 @@
+name: gpt2s_adam_2d_1
+method: grid
+parameters:
+  opt.batch_size:
+    values: [1, 512] # -> 2x
+  opt.b1:
+    values: [0.00000, 0.50000, 0.68913, 0.81873, 0.89814, 0.94393, 0.96948, 0.98349, 0.99110, 0.99521, 0.99742, 0.99861] # -> 12x
+  +scaling.opt.peak_lr:
+    values: [0.125, 0.177, 0.250, 0.354, 0.500, 0.707, 1.000, 1.414, 2.000, 2.828, 4.000, 5.657, 8.000] # -> 13
+  # total: 2*12*13=312
+program: main.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - +model=gpt2s
+  - +dataset=fw_gpt2
+  - opt.optimizer='adamw'
+  - opt.t2=10_000_000
+  - opt.max_microbatch_size=16
+  - +bs_configs.bs1.opt.peak_lr=0.000488 # 2^(-11)
+  - +bs_configs.bs512.opt.peak_lr=0.0039 # 2^(-8)
+  - +bs_configs.bs512.opt.weight_decay=0.1
+  - ${args_no_hyphens}

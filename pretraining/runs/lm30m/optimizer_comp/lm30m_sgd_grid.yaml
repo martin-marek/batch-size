@@ -1,0 +1,18 @@
+name: lm30m_sgd_grid_1
+method: grid
+parameters:
+  opt.batch_size:
+    values: [1, 4, 16, 64, 256] # -> 5x
+  opt.peak_lr:
+    values: [0.050, 0.064, 0.081, 0.103, 0.132, 0.168, 0.214, 0.273, 0.348, 0.443, 0.564, 0.719, 0.916, 1.168, 1.488, 1.896, 2.416, 3.079, 3.924, 5.000] # -> 20x
+  # total: 5*20*=100
+program: main.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - +model=lm11m
+  - +dataset=fwedu_gpt2
+  - opt.optimizer='sgd'
+  - opt.max_microbatch_size=16
+  - ${args_no_hyphens}

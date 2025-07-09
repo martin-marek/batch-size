@@ -1,0 +1,6 @@
+# @package _global_
+
+model:
+  D: 384
+  L: 6
+  T: 512
