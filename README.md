@@ -1,8 +1,8 @@
 # Small Batch Size Training for Language Models
 
-Official repository for the paper *[Small Batch Size Training for Language Models: When Vanilla SGD Works, and Why Gradient Accumulation Is Wasteful](https://arxiv.org/abs/TODO)*
+Official repository for the paper *[Small Batch Size Training for Language Models: When Vanilla SGD Works, and Why Gradient Accumulation Is Wasteful](https://arxiv.org/abs/2507.07101)*
 
-[![](https://img.shields.io/badge/arXiv-TODO-b31b1b.svg)](https://arxiv.org/abs/TODO)
+[![](https://img.shields.io/badge/arXiv-2507.07101-b31b1b.svg)](https://arxiv.org/abs/2507.07101)
 
 ## Key results
 
@@ -31,7 +31,7 @@ All of our visualizations were done using Jupyter Notebooks found in the [utils]
   title={Small Batch Size Training for Language Models: When Vanilla SGD Works, and Why Gradient Accumulation Is Wasteful}, 
   author={Martin Marek and Sanae Lotfi and Aditya Somasundaram and Andrew Gordon Wilson and Micah Goldblum},
   year={2025},
-  eprint={TODO},
+  eprint={2507.07101},
   archivePrefix={arXiv},
   primaryClass={cs.LG}
 }
