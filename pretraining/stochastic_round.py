@@ -3,10 +3,8 @@ import jax.numpy as jnp
 
 
 def to_bf16(key, x):
-    """
-    Stochastically round fp32 input to bf16.
-    simplified implementation of https://github.com/nestordemeure/jochastic with a major sampling bias fixed
-    """
+    """Stochastically round input to bf16."""
+
     # round x (assumed to be in fp32) to two closest bf16 values
     # one of these values will be smaller than x, the other larger
     # one of these values will be closer to x (default rounding), the other will be farther away
@@ -16,7 +14,7 @@ def to_bf16(key, x):
 
     # round x to either the closer or farther value s.t. we get the true value in expectation
     ulp = jnp.abs(x_farther.astype(jnp.float32) - x_closer.astype(jnp.float32))
-    rand_unif = jax.random.uniform(key=key, shape=x.shape)
+    rand_unif = jax.random.uniform(key, x.shape)
     use_farther = rand_unif * ulp < jnp.abs(error)
     x_stoch = jnp.where(use_farther, x_farther, x_closer)
     
