@@ -18,7 +18,7 @@ class TransformerDecoder(nnx.Module):
         self.token_embed_in = nnx.Embed(num_embeddings=c.V, features=c.D, embedding_init=embed_in_init, rngs=rngs)
         self.token_embed_out = nnx.Embed(num_embeddings=c.V, features=c.D, embedding_init=embed_out_init, rngs=rngs)
         self.blocks = [TransformerBlock(c, rngs, mesh) for _ in range(c.L)]
-        self.out_ln = nnx.RMSNorm(c.D, use_scale=False, dtype=c.dtype, rngs=rngs)
+        self.out_ln = nnx.RMSNorm(c.D, use_scale=False, rngs=rngs)
         self.remat = c.remat
         
     def __call__(self, x): # [B, S]
@@ -40,8 +40,8 @@ class TransformerDecoder(nnx.Module):
 
 class TransformerBlock(nnx.Module):
     def __init__(self, c: DictConfig, rngs: nnx.Rngs, mesh):
-        self.ln1 = nnx.RMSNorm(c.D, use_scale=False, dtype=c.dtype, rngs=rngs)
-        self.ln2 = nnx.RMSNorm(c.D, use_scale=False, dtype=c.dtype, rngs=rngs)
+        self.ln1 = nnx.RMSNorm(c.D, use_scale=False, rngs=rngs)
+        self.ln2 = nnx.RMSNorm(c.D, use_scale=False, rngs=rngs)
         self.attn = MultiHeadAttention(c, rngs, mesh)
         self.mlp = Mlp(c, rngs)
         
@@ -55,10 +55,10 @@ class MultiHeadAttention(nnx.Module):
     def __init__(self, c: DictConfig, rngs: nnx.Rngs, mesh):
         qkv_proj_init = sharded_init('attn_qkv_proj')
         out_proj_init = sharded_init('attn_out_proj')
-        self.qkv_proj = nnx.Einsum('BTd,SNdH->SBTNH', (3, c.N, c.D, c.H), kernel_init=qkv_proj_init, dtype=c.dtype, rngs=rngs)
-        self.out_proj = nnx.Einsum('BTnh,nhD->BTD', (c.N, c.H, c.D),  kernel_init=out_proj_init, dtype=c.dtype, rngs=rngs)
-        self.query_norm = nnx.RMSNorm(c.H, use_scale=False, dtype=c.dtype, rngs=rngs)
-        self.key_norm = nnx.RMSNorm(c.H, use_scale=False, dtype=c.dtype, rngs=rngs)
+        self.qkv_proj = nnx.Einsum('BTd,SNdH->SBTNH', (3, c.N, c.D, c.H), kernel_init=qkv_proj_init, rngs=rngs)
+        self.out_proj = nnx.Einsum('BTnh,nhD->BTD', (c.N, c.H, c.D),  kernel_init=out_proj_init, rngs=rngs)
+        self.query_norm = nnx.RMSNorm(c.H, use_scale=False, rngs=rngs)
+        self.key_norm = nnx.RMSNorm(c.H, use_scale=False, rngs=rngs)
         if c.use_flash_attn and jax.devices()[0].platform == 'tpu' and (c.H % 128 != 0):
             warnings.warn('cannot use flash attention because `model.H` is not a multiple of 128.')
         c.use_flash_attn &= jax.devices()[0].platform == 'tpu'
@@ -135,8 +135,8 @@ class Mlp(nnx.Module):
     def __init__(self, c: DictConfig, rngs: nnx.Rngs):
         fc1_init = sharded_init('mlp_fc1')
         fc2_init = sharded_init('mlp_fc2')
-        self.fc1 = nnx.Linear(in_features=c.D, out_features=c.F, kernel_init=fc1_init, use_bias=False, dtype=c.dtype, rngs=rngs)
-        self.fc2 = nnx.Linear(in_features=c.F, out_features=c.D, kernel_init=fc2_init, use_bias=False, dtype=c.dtype, rngs=rngs)
+        self.fc1 = nnx.Linear(in_features=c.D, out_features=c.F, kernel_init=fc1_init, use_bias=False, rngs=rngs)
+        self.fc2 = nnx.Linear(in_features=c.F, out_features=c.D, kernel_init=fc2_init, use_bias=False, rngs=rngs)
         
     def __call__(self, x): # [B, T, D]
         h = jax.nn.gelu(self.fc1(x)) # [B, T, F]

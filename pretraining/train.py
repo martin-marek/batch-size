@@ -11,6 +11,7 @@ from omegaconf.dictconfig import DictConfig
 import data, utils
 import model as model_lib
 import optimizer as optimizer_lib
+import stochastic_round
 
 
 @partial(jax.jit, static_argnames=('model_graphdef', 'pad'))
@@ -24,16 +25,26 @@ def loss_fn(model_state, model_graphdef, x, pad=False): # [B, T]
     return (losses * loss_mask).sum() / loss_mask.sum()
 
 
-@partial(jax.jit, static_argnames=('opt_graphdef', 'model_graphdef'), donate_argnames=('opt_state'))
-def train_step(opt_state, opt_graphdef, model_graphdef, batch):
+@partial(jax.jit, static_argnames=('opt_graphdef', 'model_graphdef', 'simulate_bf16'))
+def train_step(key, opt_state, opt_graphdef, model_graphdef, batch, simulate_bf16=False):
+    # traing step in fp32
     loss, grads = jax.value_and_grad(loss_fn)(opt_state.model, model_graphdef, batch)
     optimizer = nnx.merge(opt_graphdef, opt_state)
     optimizer.update(grads)
     opt_state = nnx.state(optimizer)
+
+    # optionally simulate bf16 weights
+    # during fwd and bwd pass, we keep all weights in fp32 to force jax to compute fp32 activations and grads
+    # after every optimzier step we round model and optimizer state to bf16 to simulate bf16 weights
+    if simulate_bf16:
+        key_tree = otu.tree_split_key_like(key, opt_state)
+        round_leaf = lambda key, x: stochastic_round.to_bf16(key, x).astype(jnp.float32)
+        opt_state = jax.tree.map(round_leaf, key_tree, opt_state)
+    
     return opt_state, loss
 
 
-@partial(jax.jit, static_argnames=('opt_graphdef', 'model_graphdef'), donate_argnames=('opt_state'))
+@partial(jax.jit, static_argnames=('opt_graphdef', 'model_graphdef'))
 def train_step_grad_acc(opt_state, opt_graphdef, model_graphdef, batches):
     n_batch = len(batches)
     loss_mean = 0
@@ -61,7 +72,7 @@ def train_and_evaluate(c: DictConfig):
 
     # get model and dataset rng seed
     key = jax.random.key(c.seed)
-    key_model, key_dataset = jax.random.split(key)
+    key, key_model, key_dataset = jax.random.split(key, 3)
 
     # sharding
     # all devices are aligned across a single mesh axis called 'data'
@@ -74,9 +85,6 @@ def train_and_evaluate(c: DictConfig):
     c.model.V = int(math.ceil(c.model.V / jax.device_count()) * jax.device_count()) # round V up to enable sharding
     model = model_lib.create_sharded_model(c.model, mesh, key_model)
     model_graphdef, model_state = nnx.split(model)
-    # print('model sharding:')
-    # jax.debug.visualize_array_sharding(model.token_embed_in.embedding.value)
-    # jax.tree.map_with_path(lambda path, p: print(f'{jax.tree_util.keystr(path)}: {p.shape}'), model_state)
 
     # get num. model parameters
     n_params = {
@@ -115,7 +123,8 @@ def train_and_evaluate(c: DictConfig):
             # training step (no accumulation)
             if c.opt.grad_acc_steps == 1:
                 batch = ds_train[step]
-                opt_state, batch_loss = train_step(opt_state, opt_graphdef, model_graphdef, batch)
+                key, key_round = jax.random.split(key)
+                opt_state, batch_loss = train_step(key_round, opt_state, opt_graphdef, model_graphdef, batch, c.opt.simulate_bf16)
 
             # train step (gradient accumulation)
             if c.opt.grad_acc_steps > 1:
@@ -129,7 +138,6 @@ def train_and_evaluate(c: DictConfig):
                 metrics = {}
                 metrics['train_loss'] = train_loss_sum / train_loss_num
                 metrics['train_tokens_seen'] = (step+1) * tokens_per_opt_step
-                metrics['learning_rate'] = opt_state.opt_state.hyperparams['learning_rate'].value
                 if jax.process_index() == 0:
                     wandb.log(metrics, step)
                     pbar.set_postfix_str(f'loss={metrics["train_loss"]:.2f}')

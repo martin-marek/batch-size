@@ -35,18 +35,17 @@ def get_optimizer(c: DictConfig, params, num_opt_steps: int, tokens_per_opt_step
         assert c.t2 is None
         assert c.weight_decay == 0
         signed = c.optimizer == 'signum'
-        optimizer = optax.inject_hyperparams(sgd)(lr_schedule, c.b1, signed)
+        optimizer = sgd(lr_schedule, c.b1, signed)
 
     if c.optimizer == 'adamw':
         assert c.b1 is not None
         assert c.b2 is not None
-        optimizer = optax.inject_hyperparams(optax.adamw)(lr_schedule, c.b1, c.b2, weight_decay=c.weight_decay)
+        optimizer = optax.adamw(lr_schedule, c.b1, c.b2, weight_decay=c.weight_decay)
     
     if c.optimizer == 'adafactor':
         assert c.b1 is None
         assert c.b2 is not None
-        optimizer = optax.inject_hyperparams(optax.adafactor, static_args='min_dim_size_to_factor')(lr_schedule, min_dim_size_to_factor=128, decay_rate=c.b2)
-    
+        optimizer = optax.adafactor(lr_schedule, min_dim_size_to_factor=128, decay_rate=c.b2, weight_decay_rate=c.weight_decay)
 
     if c.optimizer == 'muon':
         assert c.b1 is not None
@@ -54,7 +53,10 @@ def get_optimizer(c: DictConfig, params, num_opt_steps: int, tokens_per_opt_step
         assert c.muon_lr is not None
         assert c.muon_b1 is not None
         muon_lr = optax.schedules.warmup_cosine_decay_schedule(0, c.muon_lr, warmup_steps, num_opt_steps)
-        optimizer = optax.inject_hyperparams(muon)(muon_lr, c.muon_b1, lr_schedule, c.b1, c.b2)
+        optimizer = muon(muon_lr, c.muon_b1, lr_schedule, c.b1, c.b2)
+
+    if c.clip_by_global_norm is not None:
+        optimizer = optax.chain(optax.clip_by_global_norm(c.clip_by_global_norm), optimizer)
 
     return optimizer
 
