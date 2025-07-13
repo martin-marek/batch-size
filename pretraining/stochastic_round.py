@@ -17,7 +17,7 @@ def to_bf16(key, x):
     # round x to either the closer or farther value s.t. we get the true value in expectation
     ulp = jnp.abs(x_farther.astype(jnp.float32) - x_closer.astype(jnp.float32))
     rand_unif = jax.random.uniform(key=key, shape=x.shape)
-    use_closer = rand_unif * ulp > jnp.abs(error)
-    x_stoch = jnp.where(use_closer, x_closer, x_farther)
+    use_farther = rand_unif * ulp < jnp.abs(error)
+    x_stoch = jnp.where(use_farther, x_farther, x_closer)
     
     return x_stoch
