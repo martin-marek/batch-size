@@ -60,6 +60,6 @@ python main.py \
   opt.optimizer='adafactor' \
   opt.batch_size=1 \
   num_tp_devices=4 \
-  opt.peak_lr=0.012 \
+  opt.peak_lr=0.0032 \
   opt.b2=0.9999 \
-  run_name='gpt3xl_adafactor_2_012'
+  run_name='gpt3xl_adafactor_2_0032'
