@@ -2,7 +2,7 @@ name: gpt2s_sgd_bs1_v3_1
 method: grid
 parameters:
   opt.peak_lr:
-    values: [0.06, 0.012, 0.025, 0.05, 0.1, 0.2, 0.4, 0.8] # -> 8x
+    values: [0.006, 0.012, 0.025, 0.05, 0.1, 0.2, 0.4, 0.8] # -> 8x
 program: main.py
 command:
   - ${env}
