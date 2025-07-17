@@ -1,6 +1,5 @@
 
 # oai baseline
-cd ~/picodo-bs
 python main.py \
   +model=gpt3xl \
   +dataset=fw_gpt2 \
@@ -16,7 +15,6 @@ python main.py \
 
 
 # bs1 adam, fixed b2
-cd ~/picodo-bs
 python main.py \
   +model=gpt3xl \
   +dataset=fw_gpt2 \
@@ -29,7 +27,6 @@ python main.py \
   run_name='gpt3xl_adam_b2_2'
 
 # bs1 adam, fixed t2
-cd ~/picodo-bs
 python main.py \
   +model=gpt3xl \
   +dataset=fw_gpt2 \
@@ -42,7 +39,6 @@ python main.py \
   run_name='gpt3xl_adam_t2_2'
 
 # bs1 sgd
-cd ~/picodo-bs
 python main.py \
   +model=gpt3xl \
   +dataset=fw_gpt2 \
@@ -53,7 +49,6 @@ python main.py \
   run_name='gpt3xl_sgd_2'
 
 # bs1 adafactor
-cd ~/picodo-bs
 python main.py \
   +model=gpt3xl \
   +dataset=fw_gpt2 \
