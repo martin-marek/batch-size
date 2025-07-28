@@ -4,7 +4,7 @@ For our fine-tuning experiments, we implemented Gemma 3 mostly from scratch, inc
 
 ## Manual training
 
-For runnign experiments, we recommend interfacing with Python, although Bash is also supported thanks to [Fire](https://github.com/google/python-fire).
+For running experiments, we recommend interfacing with Python, although Bash is also supported thanks to [Fire](https://github.com/google/python-fire).
 
 ```python
 # Python
