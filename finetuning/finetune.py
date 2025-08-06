@@ -82,7 +82,7 @@ def finetune(
         wandb.init(project='picodo-finetune', config=train_config, mode=wandb_mode, name=run_name)
 
     # load model
-    print('loading model…')
+    print('loading model...')
     n_tensor_devices = jax.device_count() // n_data_devices
     mesh = jax.make_mesh((n_data_devices, n_tensor_devices), ('data', 'model'))
     model, vocab = gemma.load_pretrained(model_variant, mesh, param_dtype, remat)

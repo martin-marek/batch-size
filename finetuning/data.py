@@ -17,14 +17,14 @@ def load_datasets(vocab, seq_len=1024):
     eos_id = vocab.eos_id()
 
     # load MATH dataset
-    print('loading datasets…')
+    print('loading datasets...')
     ds_name = 'EleutherAI/hendrycks_math'
     configs = datasets.get_dataset_config_names(ds_name) # ['algebra', 'counting_and_probability', 'geometry', 'intermediate_algebra', 'number_theory', 'prealgebra', 'precalculus']
     ds_train = datasets.concatenate_datasets([datasets.load_dataset(ds_name, config, split='train') for config in configs]) # ['problem', 'solution']
     ds_valid = datasets.concatenate_datasets([datasets.load_dataset(ds_name, config, split='test') for config in configs]) # ['problem', 'solution']
 
     # tokenize trainind dataset
-    print('tokenizing training dataset…')
+    print('tokenizing training dataset...')
     train_tokens = np.full([len(ds_train), seq_len], pad_id, dtype=np.int32)
     train_pos = np.zeros([len(ds_train), seq_len], dtype=np.int32)
     train_loss_mask = np.zeros([len(ds_train), seq_len], dtype=np.bool_)
@@ -64,7 +64,7 @@ def load_datasets(vocab, seq_len=1024):
     print(f'skipped train. seq.: {skipped / len(ds_train):.1%}')
 
     # tokenize eval dataset
-    print('tokenizing eval dataset…')
+    print('tokenizing eval dataset...')
     skipped = 0
     prompts_eval = []
     problems_eval = []
