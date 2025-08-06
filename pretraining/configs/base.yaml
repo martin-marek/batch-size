@@ -8,10 +8,10 @@ ds_path: null
 tokens_params_ratio: 20 # chinchilla scaling
 num_tokens_train: null
 log_every_tokens: 1_000_000
-num_tokens_valid: 1_000_000
+num_tokens_valid: 20_000_000
 pad_eval: false
 wandb_project: 'picodo-bs'
-wandb_mode: 'online'
+wandb_mode: 'disabled'
 run_name: null
 num_tp_devices: 1 # optional tensor parallelism
 
@@ -23,6 +23,8 @@ model:
   N: ${floordiv:${model.D}, ${model.H}} # num. attention heads
   T: null # context/sequence length
   V: null # vocab size -> must match dataset tokenizer!
+  param_dtype: 'float32'
+  activ_dtype: 'float32'
   remat: false
   use_flash_attn: true
 
@@ -46,4 +48,4 @@ opt:
   b2_min: null
   weight_decay: 0
   clip_by_global_norm: null
-  simulate_bf16: False
+  stochastic_round: false

@@ -18,8 +18,8 @@ def apply_rope(
     fraction = 2 * jnp.arange(0, H // 2) / H # [H/2]
     timescale = max_wavelength**fraction # [H/2]
 
-    sinusoid_inp = (positions[..., None] / timescale[None, None, :]) # [B, T, H/2]
-    sinusoid_inp = sinusoid_inp[..., None, :] # [B, T, 1, H/2]
+    sinusoid_inp = (positions[:, :, None] / timescale[None, None, :]) # [B, T, H/2]
+    sinusoid_inp = sinusoid_inp[:, :, None, :] # [B, T, 1, H/2]
     sinusoid_inp /= scale_factor # [B, T, 1, H/2]
 
     sin = jnp.sin(sinusoid_inp) # [B, T, 1, H/2]

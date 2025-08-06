@@ -1,5 +1,5 @@
 import hydra
-import train
+from train import train_and_evaluate
 from configs import resolver_setup
 from omegaconf import OmegaConf, DictConfig
 from utils import flatten_dict
@@ -35,7 +35,7 @@ def main(c: DictConfig):
     # run training job
     OmegaConf.resolve(c)
     print(OmegaConf.to_yaml(c))
-    train.train_and_evaluate(c)
+    train_and_evaluate(c)
 
 
 if __name__ == '__main__':

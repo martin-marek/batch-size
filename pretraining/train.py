@@ -11,7 +11,6 @@ from omegaconf.dictconfig import DictConfig
 import data, utils
 import model as model_lib
 import optimizer as optimizer_lib
-import stochastic_round
 
 
 @partial(jax.jit, static_argnames=('model_graphdef', 'pad'))
@@ -25,47 +24,38 @@ def loss_fn(model_state, model_graphdef, x, pad=False): # [B, T]
     return (losses * loss_mask).sum() / loss_mask.sum()
 
 
-@partial(jax.jit, static_argnames=('opt_graphdef', 'model_graphdef', 'simulate_bf16'))
-def train_step(key, opt_state, opt_graphdef, model_graphdef, batch, simulate_bf16=False):
-    # traing step in fp32
-    loss, grads = jax.value_and_grad(loss_fn)(opt_state.model, model_graphdef, batch)
-    optimizer = nnx.merge(opt_graphdef, opt_state)
-    optimizer.update(grads)
-    opt_state = nnx.state(optimizer)
+@partial(jax.jit, static_argnames=('opt_graphdef', 'model_graphdef'), donate_argnames=('opt_state'))
+def train_step(key, opt_state, opt_graphdef, model_graphdef, batch):
+    key, key_opt = jax.random.split(key)
 
-    # optionally simulate bf16 weights
-    # during fwd and bwd pass, we keep all weights in fp32 to force jax to compute fp32 activations and grads
-    # after every optimzier step we round model and optimizer state to bf16 to simulate bf16 weights
-    if simulate_bf16:
-        key_tree = otu.tree_split_key_like(key, opt_state)
-        round_leaf = lambda key, x: stochastic_round.to_bf16(key, x).astype(jnp.float32)
-        opt_state = jax.tree.map(round_leaf, key_tree, opt_state)
+    # compute grads from a single micro-batch
+    if batch.ndim == 2:
+        loss, grads = jax.value_and_grad(loss_fn)(opt_state.model, model_graphdef, batch)
     
-    return opt_state, loss
-
-
-@partial(jax.jit, static_argnames=('opt_graphdef', 'model_graphdef'))
-def train_step_grad_acc(opt_state, opt_graphdef, model_graphdef, batches):
-    n_batch = len(batches)
-    loss_mean = 0
-    grad_mean = otu.tree_zeros_like(opt_state.model)
-    def step_fn(i , args):
-        grad_mean, loss_mean = args
-        batch_loss, batch_grads = jax.value_and_grad(loss_fn)(opt_state.model, model_graphdef, batches[i])
-        grad_mean = jax.tree.map(lambda m, g: (i*m + g) / (i+1), grad_mean, batch_grads)
-        loss_mean = (i*loss_mean + batch_loss) / (i+1)
-        return grad_mean, loss_mean
-    grad_mean, loss_mean = jax.lax.fori_loop(0, n_batch, step_fn, (grad_mean, loss_mean))
+    # compute grads from multiple micro-batches (using gradient accumulation)
+    if batch.ndim == 3:
+        loss = 0
+        grads = otu.tree_zeros_like(opt_state.model, dtype=jnp.float32)
+        def step_fn(i , args):
+            loss, grads = args
+            batch_loss, batch_grads = jax.value_and_grad(loss_fn)(opt_state.model, model_graphdef, batch[i])
+            loss = (i*loss + batch_loss) / (i+1)
+            grads = jax.tree.map(lambda m, g: (i*m + g) / (i+1), grads, batch_grads)
+            return loss, grads
+        loss, grads = jax.lax.fori_loop(0, len(batch), step_fn, (loss, grads))
+        
+    # optimizer step
     optimizer = nnx.merge(opt_graphdef, opt_state)
-    optimizer.update(grad_mean)
+    optimizer.update(key_opt, grads)
     opt_state = nnx.state(optimizer)
-    return opt_state, loss_mean
+    return key, opt_state, loss
 
 
-@partial(jax.jit, static_argnames=('model_graphdef', 'pad'))
 def eval_step(model_state, model_graphdef, dataset, pad=False):
-    losses = jax.lax.map(partial(loss_fn, model_state, model_graphdef, pad=pad), dataset)
-    return losses.mean()
+    loss = 0
+    for batch in dataset:
+        loss += loss_fn(model_state, model_graphdef, batch, pad)
+    return loss / len(dataset)
 
 
 def train_and_evaluate(c: DictConfig):
@@ -75,16 +65,15 @@ def train_and_evaluate(c: DictConfig):
     key, key_model, key_dataset = jax.random.split(key, 3)
 
     # sharding
-    # all devices are aligned across a single mesh axis called 'data'
-    # we use FSDP to shard data, model, and optimzier parameters across this axis
     num_fsdp_devices = jax.device_count() // c.num_tp_devices
     mesh = jax.make_mesh((num_fsdp_devices, c.num_tp_devices), ('data', 'model'))
     print('sharding mesh:', ', '.join(f'{k}={v}' for k, v in mesh.shape.items()))
 
     # model
+    print('initializing model...')
     c.model.V = int(math.ceil(c.model.V / jax.device_count()) * jax.device_count()) # round V up to enable sharding
     model = model_lib.create_sharded_model(c.model, mesh, key_model)
-    model_graphdef, model_state = nnx.split(model)
+    model_graphdef = nnx.graphdef(model)
 
     # get num. model parameters
     n_params = {
@@ -104,8 +93,8 @@ def train_and_evaluate(c: DictConfig):
     # optimizer
     num_opt_steps = len(ds_train) // c.opt.grad_acc_steps
     tokens_per_opt_step = c.opt.batch_size * c.model.T
-    tx = optimizer_lib.get_optimizer(c.opt, model_state, num_opt_steps, tokens_per_opt_step)
-    optimizer = nnx.Optimizer(model, tx)
+    tx = optimizer_lib.get_optimizer(c.opt, num_opt_steps, tokens_per_opt_step)
+    optimizer = optimizer_lib.Optimizer(model, tx, stochastic_round=c.opt.stochastic_round)
     opt_graphdef, opt_state = nnx.split(optimizer)
 
     # start wandb
@@ -116,21 +105,20 @@ def train_and_evaluate(c: DictConfig):
     # training loop
     train_loss_sum, train_loss_num = jnp.zeros([]), 0
     with mesh:
+
         pbar = range(num_opt_steps)
         if jax.process_index() == 0: pbar = tqdm(pbar)
         for step in pbar:
-            
-            # training step (no accumulation)
-            if c.opt.grad_acc_steps == 1:
-                batch = ds_train[step]
-                key, key_round = jax.random.split(key)
-                opt_state, batch_loss = train_step(key_round, opt_state, opt_graphdef, model_graphdef, batch, c.opt.simulate_bf16)
 
-            # train step (gradient accumulation)
+            # get batch
+            if c.opt.grad_acc_steps == 1:
+                batch = ds_train[step] # [batch_size, T]
             if c.opt.grad_acc_steps > 1:
-                batches = ds_train[step*c.opt.grad_acc_steps:(step+1)*c.opt.grad_acc_steps] # [grad_acc, micro_batch, T]
-                opt_state, batch_loss = train_step_grad_acc(opt_state, opt_graphdef, model_graphdef, batches)
-            
+                batch = ds_train[step*c.opt.grad_acc_steps:(step+1)*c.opt.grad_acc_steps] # [grad_acc_steps, micro_batch_size, T]
+
+            # training step
+            key, opt_state, batch_loss = train_step(key, opt_state, opt_graphdef, model_graphdef, batch)
+
             # logging
             train_loss_sum += batch_loss
             train_loss_num += 1
