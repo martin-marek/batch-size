@@ -1,0 +1,7 @@
+jax
+flax
+optax
+numpy
+tqdm
+hydra-core
+wandb
