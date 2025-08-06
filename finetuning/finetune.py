@@ -107,7 +107,7 @@ def finetune(
     # load datasets
     print('loading data...')
     train_tokens, train_pos, train_attn_mask, train_loss_mask, tokens_eval, problems_eval, solutions_eval = data.load_datasets(vocab)
-    
+
     # optimizer
     warmup_frac = 0.05
     n_train_samples = len(train_tokens)
@@ -141,26 +141,22 @@ def finetune(
             if (jax.process_index() == 0): pbar = tqdm(total=n_optimizer_steps, desc='Training')
             for epoch in range(n_epochs):
 
-                # iterate over dataset
+                # iterate over batches
                 key, key_train = jax.random.split(key)
                 idxs = jax.random.choice(key_train, n_train_samples, shape=[n_batches, grad_acc_steps, microbatch_size], replace=False)
                 for idx in idxs:
 
                     # shard batch
-                    if train_parallelism == 'seq':
-                        tokens_batch = jax.device_put(train_tokens[idx], NamedSharding(mesh, P(None, None, 'data'))) # [grad_acc_steps, microbatch_size, seq_len]
-                        pos_batch = jax.device_put(train_pos[idx], NamedSharding(mesh, P(None, None, 'data'))) # [grad_acc_steps, microbatch_size, seq_len]
-                        loss_mask_batch = jax.device_put(train_loss_mask[idx], NamedSharding(mesh, P(None, None, 'data'))) # [grad_acc_steps, microbatch_size, seq_len]
-                        attn_mask_batch = jax.device_put(train_attn_mask[idx], NamedSharding(mesh, P(None, None, None, None))) # [grad_acc_steps, microbatch_size, seq_len, seq_len]
-                    if train_parallelism == 'batch':
-                        tokens_batch = jax.device_put(train_tokens[idx], NamedSharding(mesh, P(None, 'data', None))) # [grad_acc_steps, microbatch_size, seq_len]
-                        pos_batch = jax.device_put(train_pos[idx], NamedSharding(mesh, P(None, 'data', None))) # [grad_acc_steps, microbatch_size, seq_len]
-                        loss_mask_batch = jax.device_put(train_loss_mask[idx], NamedSharding(mesh, P(None, 'data', None))) # [grad_acc_steps, microbatch_size, seq_len]
-                        attn_mask_batch = jax.device_put(train_attn_mask[idx], NamedSharding(mesh, P(None, 'data', None, None))) # [grad_acc_steps, microbatch_size, seq_len, seq_len]
-                    
+                    token_pspec = P(None, 'data', None) if train_parallelism == 'batch' else P(None, None, 'data') # [grad_acc_steps, microbatch_size, seq_len]
+                    attn_mask_pspec = P(None, 'data', None, None) if train_parallelism == 'batch' else P(None, None, None, None) # [grad_acc_steps, microbatch_size, seq_len, seq_len]
+                    tokens_batch = jax.device_put(train_tokens[idx], NamedSharding(mesh, token_pspec))
+                    pos_batch = jax.device_put(train_pos[idx], NamedSharding(mesh, token_pspec))
+                    loss_mask_batch = jax.device_put(train_loss_mask[idx], NamedSharding(mesh, token_pspec))
+                    attn_mask_batch = jax.device_put(train_attn_mask[idx], NamedSharding(mesh, attn_mask_pspec))
+
                     # training step
                     key, opt_state, batch_loss = train_step(key, opt_state, opt_graphdef, tokens_batch, pos_batch, attn_mask_batch, loss_mask_batch, use_lora)
-                        
+                    
                     # logging
                     train_loss += batch_loss
                     log_every_steps = log_every_samples // batch_size
