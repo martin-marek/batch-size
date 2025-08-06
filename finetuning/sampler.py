@@ -2,7 +2,6 @@ import jax
 import jax.numpy as jnp
 import flax
 from flax import nnx
-from tqdm.auto import tqdm
 from functools import partial
 
 
@@ -29,9 +28,7 @@ def _sample_top_p(key, probs, p=0.95):
     return next_token
 
 
-def _sample_step(state, model_graphdef, model_state, pbar, pad_id, eos_id, temperature=1):
-
-    # we pass model_state as non-static arg, to avoid compiling it
+def _sample_step(state, model_graphdef, model_state, pad_id, eos_id, temperature=1):
     model = nnx.merge(model_graphdef, model_state)
 
     # sample next token
@@ -51,12 +48,13 @@ def _sample_step(state, model_graphdef, model_state, pbar, pad_id, eos_id, tempe
 
     # check if sampling is done
     done = state.done | ((next_token==pad_id) & (sampled_token==eos_id))
-    jax.debug.callback(lambda: pbar.update(1) if jax.process_index() == 0 else None)
-    
+
     return SamplingState(key, state.step+1, tokens, kv_cache, done)
 
 
-def sample(key, model, tokens, temperature=1, pad_id=0, eos_id=1):
+@partial(jax.jit, static_argnames=('model_graphdef', 'temperature'))
+def sample(key, model_graphdef, model_state, tokens, temperature=1, pad_id=0, eos_id=1):
+    model = nnx.merge(model_graphdef, model_state)
     B, T = tokens.shape
 
     # initialize state
@@ -69,18 +67,8 @@ def sample(key, model, tokens, temperature=1, pad_id=0, eos_id=1):
     )
 
     # sample next token inside a while loop
-    pbar = tqdm(total=T, desc='Sampling') if (jax.process_index() == 0) else None
-    step_fn = lambda state: _sample_step(state, *nnx.split(model), pbar, pad_id, eos_id, temperature)
+    step_fn = lambda state: _sample_step(state, *nnx.split(model), pad_id, eos_id, temperature)
     cond_fn = lambda state: (state.step < T) & jnp.any(~state.done)
     state = jax.lax.while_loop(cond_fn, step_fn, state)
-    jax.effects_barrier()
-    if jax.process_index() == 0: pbar.close()
 
-    # extract output sequences
-    outputs = []
-    for in_seq, out_seq in zip(jax.device_get(tokens), jax.device_get(state.tokens)):
-        out_seq = out_seq[jnp.argmax(in_seq==pad_id):]
-        if jnp.any(out_seq==pad_id): out_seq = out_seq[:jnp.argmax(out_seq==pad_id)]
-        outputs += [out_seq.tolist()]
-
-    return outputs
+    return state.tokens

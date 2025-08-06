@@ -1,23 +1,22 @@
-name: gemma4bpt_math_5ep_lora_v1
+name: gemma4bpt_math_5ep_lora_v2
 method: grid
 parameters:
   peak_lr:
     values: [3.2e-7, 1.0e-6, 3.2e-6, 1.0e-5, 3.2e-5, 1.0e-4, 3.2e-4, 1.0e-3]
   seed:
-    values: [0, 1, 2, 3, 4, 5, 6, 7]
+    values: [0, 1, 2, 3]
 program: finetune.py
 command:
   - ${env}
   - ${interpreter}
   - ${program}
   - --model_variant='gemma3-4b'
+  - --param_dtype='bfloat16'
   - --lora_rank=16
   - --optimizer_name='adam'
   - --batch_size=1
   - --n_epochs=5
   - --b2=0.997
-  - --n_eval_samples=512
   - --eval_batch_size=128
-  - --logging=True
-  - --log_every_steps=50
+  - --wandb_mode='online'
   - ${args}

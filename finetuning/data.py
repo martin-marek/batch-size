@@ -1,11 +1,14 @@
-import math
+import os
 import jax
 import jax.numpy as jnp
+from flax import nnx
 import numpy as np
 import datasets
+from contextlib import redirect_stderr
 from jax.sharding import NamedSharding, PartitionSpec as P
 from math_verify import parse, verify
 from sampler import sample
+from tqdm.auto import tqdm
 
 
 def load_datasets(vocab, seq_len=1024):
@@ -83,21 +86,31 @@ def load_datasets(vocab, seq_len=1024):
     return train_tokens, train_pos, train_attn_mask, train_loss_mask, tokens_eval, problems_eval, solutions_eval
 
 
-def benchmark_model(key, model, tokens, problems_eval, solutions_eval, vocab, batch_size, n_eval_samples=None, temperature=1):
+def benchmark_model(key, model, tokens, problems_eval, solutions_eval, vocab, batch_size, n_eval_samples=None, temperature=1, print_output=True):
     pad_id = vocab.pad_id()
     eos_id = vocab.eos_id()
     key_decoding, key_questions = jax.random.split(key)
     mesh = model.in_embed.embedding.value.sharding.mesh
     if n_eval_samples is None: n_eval_samples = len(tokens)
-    n_batches = int(math.ceil(n_eval_samples / batch_size))
-    n_eval_samples = n_batches * batch_size
-    sample_idxs = jax.random.choice(key_questions, max(n_eval_samples, len(tokens)), shape=[n_batches, batch_size], replace=False)
+    n_batches = n_eval_samples // batch_size
+    sample_idxs = jax.random.choice(key_questions, len(tokens), shape=[n_batches, batch_size], replace=False)
     lengths_list = []
     correct_list = []
     finished_list = []
-    for batch_idx in sample_idxs:
-        tokens_batch = jax.device_put(tokens[batch_idx], NamedSharding(mesh, P('data', None)))
-        completions_tokens = sample(key_decoding, model, tokens_batch, temperature)
+    pbar = tqdm(sample_idxs, desc='Sampling') if (jax.process_index() == 0) else sample_idxs
+    for batch_idx in pbar:
+        # sample tokens
+        input_tokens_batch = jax.device_put(tokens[batch_idx], NamedSharding(mesh, P('data', None)))
+        output_tokens_batch = sample(key_decoding, *nnx.split(model), input_tokens_batch, temperature)
+
+        # extract output sequences
+        completions_tokens = []
+        for in_seq, out_seq in zip(input_tokens_batch, output_tokens_batch):
+            out_seq = out_seq[jnp.argmax(in_seq==pad_id):]
+            if jnp.any(out_seq==pad_id): out_seq = out_seq[:jnp.argmax(out_seq==pad_id)]
+            completions_tokens += [out_seq.tolist()]
+
+        # eval completions
         completions_text = vocab.DecodeIds(completions_tokens)
         for sample_idx, completion_tokens, completion_text in zip(batch_idx, completions_tokens, completions_text):
             if sample_idx < len(problems_eval):
@@ -109,7 +122,8 @@ def benchmark_model(key, model, tokens, problems_eval, solutions_eval, vocab, ba
                 lengths_list += [len(completion_tokens)]
                 finished_list += [finished]
                 correct_list += [correct]
-                print('------------')
-                print(f'PROMPT:\n{problem}\nCOMPLETION:\n{completion_text}\nPARSED: {parsed}\nGOLD: {gold}\nCORRECT: {correct}')
+                if print_output:
+                    print('------------')
+                    print(f'PROMPT:\n{problem}\nCOMPLETION:\n{completion_text}\nPARSED: {parsed}\nGOLD: {gold}\nCORRECT: {correct}')
 
     return dict(length=np.mean(lengths_list), finished=np.mean(finished_list), accuracy=np.mean(correct_list))
