@@ -1,0 +1,13 @@
+jax
+flax
+optax
+orbax
+fire
+numpy
+tqdm
+wandb
+sentencepiece
+kagglehub
+datasets
+math_verify
+git+https://github.com/google/qwix
