@@ -322,7 +322,6 @@ def load_pretrained(model_variant, mesh=None, param_dtype='float32', remat=False
     # helpers
     flatten_path = lambda path: jax.tree_util.keystr(path, simple=True, separator='/')
     flatten_tree = lambda tree: {flatten_path(path):v for path, v in jax.tree.leaves_with_path(tree)}
-    print_tree = lambda tree: jax.tree.map_with_path(lambda path, v: print(f'{flatten_path(path)}: {v.shape}'), tree)
 
     # download weights
     with open(os.devnull, 'w') as f, redirect_stderr(f): # supress progress bar
@@ -360,29 +359,31 @@ def load_pretrained(model_variant, mesh=None, param_dtype='float32', remat=False
         return jax.ShapeDtypeStruct(v.shape, param_dtype, sharding=sharding)
     checkpoint = jax.tree.map_with_path(add_sharding, checkpoint)
 
-    # load checkpoint weights, then flatten the checkpoint keys
+    # load checkpoint weights
     checkpoint = checkpointer.restore(ckpt_path, checkpoint)
+
+    # flatten the checkpoint keys
     checkpoint = flatten_tree(checkpoint)
+
+    # adjust checkpoint weights to match NNX format
+    for key in list(checkpoint.keys()):
+        if 'scale' in key:
+            checkpoint[key] += 1
+        if 'gating_einsum' in key:
+            checkpoint[key.replace('gating_einsum', 'gate_proj')] = checkpoint[key][0].T
+            checkpoint[key.replace('gating_einsum', 'up_proj')] = checkpoint[key][1].T
+            del checkpoint[key]
 
     # transfer weights to model, mapping model layer keys to checkpoint keys
     def get_weights(path, v):
-        val_fn = lambda x: x
         key = flatten_path(path)
-        key = f'transformer/{key}'
+        key = 'transformer/' + key
         key = key.replace('/value', '')
         key = key.replace('layers/', 'layer_')
         key = key.replace('kernel', 'w')
         key = key.replace('in_embed/embedding', 'embedder/input_embedding')
         key = key.replace('mlp/down_proj', 'mlp/linear')
-        if '/scale' in key:
-            val_fn = lambda x: x+1
-        if 'mlp/gate_proj' in key:
-            key = key.replace('mlp/gate_proj', 'mlp/gating_einsum')
-            val_fn = lambda x: x[0].T
-        if 'mlp/up_proj' in key:
-            key = key.replace('mlp/up_proj', 'mlp/gating_einsum')
-            val_fn = lambda x: x[1].T
-        return val_fn(checkpoint[key])
+        return checkpoint[key]
     model_state = jax.tree.map_with_path(get_weights, model_state)
     nnx.update(model, model_state)
 
