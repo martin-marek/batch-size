@@ -1,5 +1,7 @@
 # Fine-tuning
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/martin-marek/batch-size/blob/main/finetuning/finetune.ipynb)
+
 For our fine-tuning experiments, we implemented Gemma 3 mostly from scratch, including sampling. Our code is loosely based on the [Gemma NNX example](https://github.com/google/flax/tree/main/examples/gemma).
 
 ## Manual training
@@ -16,6 +18,8 @@ finetune(model_variant='gemma3-1b')
 # Bash
 python finetune.py --model_variant='gemma3-1b'
 ```
+
+To quickly get started, we provide a [Colab Notebook](https://colab.research.google.com/github/martin-marek/batch-size/blob/main/finetuning/finetune.ipynb) to fine-tune Gemma 3 (12B) using a TPU v6e-1 with just 32 GB of memory.
 
 ## Sweeps
 
