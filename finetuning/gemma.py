@@ -341,7 +341,7 @@ def load_pretrained(model_variant, mesh=None, param_dtype='float32', remat=False
 
     # load checkpoint metadata
     checkpointer = ocp.Checkpointer(ocp.StandardCheckpointHandler())
-    checkpoint = checkpointer.metadata(ckpt_path)
+    checkpoint = checkpointer.metadata(ckpt_path).item_metadata
 
     # add checkpoint sharding annotations
     def add_sharding(path, v):
