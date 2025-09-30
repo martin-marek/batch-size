@@ -12,22 +12,22 @@ import optimizer as optimizer_lib
 import gemma, data
 
 
-def loss_fn(model, x, pos, attn_mask, loss_mask): # [B, T]
+def loss_fn(model_state, model_graphdef, x, pos, attn_mask, loss_mask): # [B, T]
+    model = nnx.merge(model_graphdef, model_state)
     y = jnp.roll(x, -1, axis=1)
     logits, _ = model(x, positions=pos, attn_mask=attn_mask) # [B, T, V]
     losses = optax.softmax_cross_entropy_with_integer_labels(logits, y) # [B, T]
     return (losses * loss_mask).sum() / loss_mask.sum()
 
 
-@partial(jax.jit, static_argnames=('opt_graphdef', 'lora'), donate_argnames=('opt_state'))
-def train_step(key, opt_state, opt_graphdef, tokens, pos, attn_mask, loss_mask, lora=False):
+@partial(jax.jit, static_argnames=('model_graphdef', 'opt_graphdef', 'lora'), donate_argnames=('opt_state'))
+def train_step(key, opt_state, model_graphdef, opt_graphdef, tokens, pos, attn_mask, loss_mask, lora=False):
     key, key_opt = jax.random.split(key)
-    optimizer = nnx.merge(opt_graphdef, opt_state)
-    argnums = nnx.DiffState(0, nnx.LoRAParam) if lora else 0
-    
+    grad_fn = jax.value_and_grad if not lora else partial(nnx.value_and_grad, argnums=nnx.DiffState(0, nnx.LoRAParam))
+
     # compute grads from a single micro-batch
-    if tokens.shape[0] == 1: 
-        loss, grads = nnx.value_and_grad(loss_fn, argnums=argnums)(optimizer.model, tokens[0], pos[0], attn_mask[0], loss_mask[0])
+    if tokens.shape[0] == 1:
+        loss, grads = grad_fn(loss_fn)(opt_state.model, model_graphdef, tokens[0], pos[0], attn_mask[0], loss_mask[0])
 
     # compute grads from multiple micro-batches (using gradient accumulation)
     if tokens.shape[0] >= 2:
@@ -35,13 +35,14 @@ def train_step(key, opt_state, opt_graphdef, tokens, pos, attn_mask, loss_mask, 
         grads = otu.tree_zeros_like(opt_state.model, dtype=jnp.float32)
         def step_fn(i, args):
             loss, grads = args
-            batch_loss, batch_grads = nnx.value_and_grad(loss_fn, argnums=argnums)(optimizer.model, tokens[i], pos[i], attn_mask[i], loss_mask[i])
+            batch_loss, batch_grads = grad_fn(loss_fn)(opt_state.model, model_graphdef, tokens[i], pos[i], attn_mask[i], loss_mask[i])
             loss = (i*loss + batch_loss) / (i+1)
             grads = jax.tree.map(lambda m, g: (i*m + g) / (i+1), grads, batch_grads)
             return loss, grads
         loss, grads = jax.lax.fori_loop(0, len(tokens), step_fn, (loss, grads))
 
     # optimizer step
+    optimizer = nnx.merge(opt_graphdef, opt_state)
     optimizer.update(key_opt, grads)
     opt_state = nnx.state(optimizer)
     return key, opt_state, loss
@@ -88,7 +89,9 @@ def finetune(
     model, vocab = gemma.load_pretrained(model_variant, mesh, param_dtype, remat)
 
     # optionally use Lora
+    grad_acc_steps = batch_size // microbatch_size
     assert not (remat and lora_rank is not None), 'remat currently not supported with Lora'
+    assert not (grad_acc_steps > 1 and lora_rank is not None), 'grad. accum. currently not supported with Lora'
     use_lora = lora_rank is not None
     if use_lora:
         import qwix
@@ -115,7 +118,6 @@ def finetune(
     warmup_frac = 0.05
     n_train_samples = len(train_tokens)
     n_batches = n_train_samples // batch_size
-    grad_acc_steps = batch_size // microbatch_size
     n_optimizer_steps = n_epochs * n_batches
     warmup_steps = int(warmup_frac * n_optimizer_steps)
     if lr_schedule == 'const': lr = peak_lr
@@ -126,6 +128,7 @@ def finetune(
     wrt = nnx.LoRAParam if use_lora else nnx.Param
     optimizer = optimizer_lib.ModelAndOptimizer(model, tx, wrt, stochastic_round)
     opt_graphdef, opt_state = nnx.split(optimizer)
+    model_graphdef = nnx.graphdef(model)
 
     # print number of parameters
     n_model_params = jax.tree.reduce(lambda x, y: x + jnp.size(y), nnx.state(model), 0)
@@ -157,7 +160,7 @@ def finetune(
                 attn_mask_batch = jax.device_put(train_attn_mask[idx], NamedSharding(mesh, attn_mask_pspec))
 
                 # training step
-                key, opt_state, batch_loss = train_step(key, opt_state, opt_graphdef, tokens_batch, pos_batch, attn_mask_batch, loss_mask_batch, use_lora)
+                key, opt_state, batch_loss = train_step(key, opt_state, model_graphdef, opt_graphdef, tokens_batch, pos_batch, attn_mask_batch, loss_mask_batch, use_lora)
                 
                 # logging
                 train_loss += batch_loss
