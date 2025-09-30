@@ -99,10 +99,13 @@ def finetune(
         model = qwix.apply_lora_to_model(model, lora_provider, dummy_input)
 
         # convert all LoRA params to float32
+        converted = False
         for path, module in model.iter_modules():
             if hasattr(module, 'kernel_lora_a'):
                 module.kernel_lora_a.value = module.kernel_lora_a.value.astype(jnp.float32)
-                module.kernel_lora_b.value = module.kernel_lora_b.value.astype(jnp.float32)   
+                module.kernel_lora_b.value = module.kernel_lora_b.value.astype(jnp.float32)
+                converted = True
+        assert converted, f'failed to cast LoRA to fp32'
     
     # load datasets
     print('loading data...')
