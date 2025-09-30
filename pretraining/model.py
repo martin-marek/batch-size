@@ -31,7 +31,7 @@ class TransformerDecoder(nnx.Module):
 
         # project back to vocabulary
         h = self.out_ln(h)
-        logits = self.token_embed_out.attend(h.astype(jnp.float32)) # [B, T, V]
+        logits = self.token_embed_out.attend(h) # [B, T, V]
         return logits
 
 
