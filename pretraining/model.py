@@ -3,7 +3,6 @@ import jax
 import jax.numpy as jnp
 from functools import partial
 from flax import nnx
-from jax.sharding import Mesh
 from jax.sharding import PartitionSpec as P
 from jax.experimental.shard_map import shard_map
 from jax.experimental.pallas.ops.tpu.splash_attention import splash_attention_kernel, splash_attention_mask
@@ -12,12 +11,12 @@ from rope import apply_rope
 
 
 class TransformerDecoder(nnx.Module):
-    def __init__(self, c: DictConfig, rngs: nnx.Rngs, mesh):
+    def __init__(self, c: DictConfig, rngs: nnx.Rngs):
         embed_in_init = sharded_init('embedding_in')
         embed_out_init = sharded_init('embedding_out')
         self.token_embed_in = nnx.Embed(num_embeddings=c.V, features=c.D, embedding_init=embed_in_init, dtype=c.activ_dtype, param_dtype=c.param_dtype, rngs=rngs)
         self.token_embed_out = nnx.Embed(num_embeddings=c.V, features=c.D, embedding_init=embed_out_init, dtype=c.activ_dtype, param_dtype=c.param_dtype, rngs=rngs)
-        self.blocks = [TransformerBlock(c, rngs, mesh) for _ in range(c.L)]
+        self.blocks = nnx.List(TransformerBlock(c, rngs) for _ in range(c.L))
         self.out_ln = nnx.RMSNorm(c.D, use_scale=False, dtype=c.activ_dtype, param_dtype=c.param_dtype, rngs=rngs)
         self.remat = c.remat
         
@@ -25,7 +24,6 @@ class TransformerDecoder(nnx.Module):
 
         # token embedding
         h = self.token_embed_in(x) # [B, T, D]
-        h = jax.lax.with_sharding_constraint(h, P('data', None, 'model'))
         
         # transformer blocks
         for block in self.blocks:
@@ -34,15 +32,14 @@ class TransformerDecoder(nnx.Module):
         # project back to vocabulary
         h = self.out_ln(h)
         logits = self.token_embed_out.attend(h.astype(jnp.float32)) # [B, T, V]
-        logits = jax.lax.with_sharding_constraint(logits, P('data', None, 'model'))
         return logits
 
 
 class TransformerBlock(nnx.Module):
-    def __init__(self, c: DictConfig, rngs: nnx.Rngs, mesh):
+    def __init__(self, c: DictConfig, rngs: nnx.Rngs):
         self.ln1 = nnx.RMSNorm(c.D, use_scale=False, dtype=c.activ_dtype, param_dtype=c.param_dtype, rngs=rngs)
         self.ln2 = nnx.RMSNorm(c.D, use_scale=False, dtype=c.activ_dtype, param_dtype=c.param_dtype, rngs=rngs)
-        self.attn = MultiHeadAttention(c, rngs, mesh)
+        self.attn = MultiHeadAttention(c, rngs)
         self.mlp = MLP(c, rngs)
         
     def __call__(self, x): # [B, T, D]
@@ -52,7 +49,7 @@ class TransformerBlock(nnx.Module):
 
 class MultiHeadAttention(nnx.Module):
     """Causal attention layer."""
-    def __init__(self, c: DictConfig, rngs: nnx.Rngs, mesh):
+    def __init__(self, c: DictConfig, rngs: nnx.Rngs):
         qkv_proj_init = sharded_init('attn_qkv_proj')
         out_proj_init = sharded_init('attn_out_proj')
         self.qkv_proj = nnx.Einsum('BTd,SNdH->SBTNH', (3, c.N, c.D, c.H), kernel_init=qkv_proj_init, dtype=c.activ_dtype, param_dtype=c.param_dtype, rngs=rngs)
@@ -63,7 +60,7 @@ class MultiHeadAttention(nnx.Module):
             warnings.warn('cannot use flash attention because `model.H` is not a multiple of 128.')
         c.use_flash_attn &= jax.devices()[0].platform == 'tpu'
         c.use_flash_attn &= (c.H % 128 == 0)
-        self.attention = partial(tpu_causal_flash_attention, mesh=mesh) if c.use_flash_attn else partial(jax.nn.dot_product_attention, is_causal=True)
+        self.attention = partial(tpu_causal_flash_attention) if c.use_flash_attn else partial(jax.nn.dot_product_attention, is_causal=True)
 
     def __call__(self, x): # [B, T, D]
         B, T, D = x.shape
@@ -88,7 +85,7 @@ class MultiHeadAttention(nnx.Module):
         return out
 
 
-def tpu_causal_flash_attention(q, k, v, mesh):
+def tpu_causal_flash_attention(q, k, v):
     """
     TPU Flash Attention.
     https://github.com/jax-ml/jax/blob/main/jax/experimental/pallas/ops/tpu/splash_attention/splash_attention_kernel.py
@@ -114,7 +111,7 @@ def tpu_causal_flash_attention(q, k, v, mesh):
     )
 
     sharding = P('data', None, 'model', None)
-    @partial(shard_map, mesh=mesh, in_specs=(sharding, sharding, sharding), out_specs=sharding, check_rep=False)
+    @partial(shard_map, in_specs=(sharding, sharding, sharding), out_specs=sharding, check_rep=False)
     def attention(q, k, v):
         _, _, n, _ = q.shape
         causal_mask = splash_attention_mask.CausalMask(shape=(T, T))
@@ -164,7 +161,7 @@ def sharded_init(layer_type: str):
             raise ValueError(f'unrecognized layer type: {layer_type}')
 
 
-def create_sharded_model(c: DictConfig, mesh: Mesh, key):
+def create_sharded_model(c: DictConfig, key):
     """
     initialize sharded model without putting it on a single device
     https://flax.readthedocs.io/en/latest/guides/flax_gspmd.html
@@ -174,14 +171,13 @@ def create_sharded_model(c: DictConfig, mesh: Mesh, key):
     @nnx.jit
     def initialize_sharded_model():
         rngs = nnx.Rngs(seed)
-        model = TransformerDecoder(c, rngs=rngs, mesh=mesh) # unsharded at this moment
+        model = TransformerDecoder(c, rngs=rngs) # unsharded at this moment
         state = nnx.state(model) # the model's state, a pure pytree
         pspecs = nnx.get_partition_spec(state) # get annotations from state
         sharded_state = jax.lax.with_sharding_constraint(state, pspecs)
         nnx.update(model, sharded_state) # the model is sharded now
         return model
 
-    with mesh:
-        model = initialize_sharded_model()
+    model = initialize_sharded_model()
 
     return model

@@ -3,40 +3,51 @@ import jax.numpy as jnp
 import optax
 from optax import tree_utils as otu
 from flax import nnx
-from flax.nnx import filterlib
-from flax.nnx.training.optimizer import OptState, _wrap_optimizer_state
+from jax.sharding import PartitionSpec as P
 from omegaconf import DictConfig
 from typing import Optional, NamedTuple
 import factorized, utils
 
 
-class Optimizer(nnx.Optimizer):
-    """Extends nnx.Optimizer with stochastic rounding."""
-    def __init__(
-        self,
-        model,
-        tx: optax.GradientTransformation,
-        wrt: filterlib.Filter = nnx.Param,
-        stochastic_round = False,
-    ):
-        self.step = nnx.training.optimizer.OptState(jnp.array(0, dtype=jnp.uint32))
-        self.model = model
+def to_opt_state(tree):
+    """Replacement for nnx.training.optimizer.to_opt_state that doesn't copy metadata."""
+    def _to_opt_state(x):
+        if isinstance(x, nnx.Variable):
+            opt_state = nnx.OptVariable(x.value)
+        else:
+            opt_state = nnx.OptArray(x)
+        return opt_state
+
+    tree = jax.tree.map(_to_opt_state, tree, is_leaf=lambda x: isinstance(x, nnx.Variable))
+    return tree
+
+
+class ModelAndOptimizer(nnx.Optimizer):
+    """
+    Extends nnx.ModelAndOptimizer (v0.12.0) by:
+    1) enabling stochastic rounding, and
+    2) not copying model metadata onto optimizer (otherwise Adafactor fails with a sharded model).
+    """
+    def __init__(self, model, tx, wrt=nnx.Param, stochastic_round=False):
+        self.step = nnx.OptState(jnp.array(0, dtype=jnp.uint32))
         self.tx = tx
-        self.opt_state = nnx.training.optimizer._wrap_optimizer_state(tx.init(nnx.state(model, wrt)))
+        self.opt_state = nnx.data(to_opt_state(tx.init(nnx.state(model, wrt)))) # <- CHANGED: doesn't copy metadata
         self.wrt = wrt
-        self.stochastic_round = stochastic_round
+        self.model = model
+        self.stochastic_round = stochastic_round # <- CHANGED: added stochastic_round support
 
     def update(self, key, grads, **kwargs):
-        params = nnx.state(self.model, self.wrt)
-        opt_state = nnx.training.optimizer._opt_state_variables_to_state(self.opt_state)
+        param_arrays = nnx.to_arrays(nnx.pure(nnx.state(self.model, self.wrt)))
+        grad_arrays = nnx.to_arrays(nnx.pure(nnx.state(grads)))
+        opt_state_arrays = nnx.to_arrays(nnx.pure(self.opt_state))
+        kwargs_arrays = nnx.to_arrays(nnx.pure(kwargs))
 
-        updates, new_opt_state = self.tx.update(grads, opt_state, params, **kwargs)
-        new_params = apply_updates(key, params, updates, self.stochastic_round)
-        assert isinstance(new_params, nnx.State)
+        updates, new_opt_state = self.tx.update(grad_arrays, opt_state_arrays, param_arrays, **kwargs_arrays)
+        new_params = apply_updates(key, param_arrays, updates, self.stochastic_round) # <- CHANGED: added stochastic_round support
 
-        self.step.value += 1
         nnx.update(self.model, new_params)
-        nnx.training.optimizer._update_opt_state(self.opt_state, new_opt_state)
+        nnx.update(self.opt_state, nnx.state(new_opt_state))
+        self.step[...] += 1
 
 
 def apply_updates(

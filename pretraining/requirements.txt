@@ -1,5 +1,5 @@
 jax
-flax==0.10.7
+flax==0.12.0
 optax
 numpy
 tqdm

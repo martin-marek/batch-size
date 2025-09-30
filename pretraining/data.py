@@ -3,7 +3,6 @@ import jax
 import numpy as np
 import jax.numpy as jnp
 from jax.sharding import PartitionSpec as P
-from jax.sharding import Mesh, NamedSharding
 
 
 def load_ds(key, mesh, ds_path, seq_len, batch_size, n_tokens_valid, n_tokens_train=None):

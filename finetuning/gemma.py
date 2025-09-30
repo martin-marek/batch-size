@@ -101,7 +101,7 @@ class GemmaConfig:
 class Gemma(nnx.Module):
     def __init__(self, c: GemmaConfig, rngs: nnx.Rngs):
         self.in_embed = nnx.Embed(c.vocab_size, c.embed_dim, dtype=c.activ_dtype, param_dtype=c.param_dtype, rngs=rngs)
-        self.layers = [
+        self.layers = nnx.List(
             TransformerBlock(
                 num_heads=c.num_heads,
                 num_kv_heads=c.num_kv_heads,
@@ -116,7 +116,7 @@ class Gemma(nnx.Module):
                 param_dtype = c.param_dtype,
                 rngs=rngs,
             ) for _, attn_type in zip(range(c.num_layers), cycle(c.attention_pattern))
-        ]
+        )
         self.final_norm = nnx.RMSNorm(c.embed_dim, dtype=c.activ_dtype, param_dtype=c.param_dtype, rngs=rngs)
         self.remat = c.remat
 
