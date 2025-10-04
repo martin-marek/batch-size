@@ -110,8 +110,9 @@ def tpu_causal_flash_attention(q, k, v):
         block_kv_dq=512,
     )
 
+    mesh = jax.sharding.get_abstract_mesh()
     sharding = P('data', None, 'model', None)
-    @partial(shard_map, in_specs=(sharding, sharding, sharding), out_specs=sharding, check_rep=False)
+    @partial(shard_map, mesh=mesh, in_specs=(sharding, sharding, sharding), out_specs=sharding, check_rep=False)
     def attention(q, k, v):
         _, _, n, _ = q.shape
         causal_mask = splash_attention_mask.CausalMask(shape=(T, T))
