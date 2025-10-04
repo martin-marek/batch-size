@@ -4,7 +4,6 @@ import jax.numpy as jnp
 from flax import nnx
 import numpy as np
 import datasets
-from contextlib import redirect_stderr
 from jax.sharding import NamedSharding, PartitionSpec as P
 from math_verify import parse, verify
 from sampler import sample
