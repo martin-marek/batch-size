@@ -82,10 +82,14 @@ def finetune(
         print(f'{train_config=}')
         wandb.init(project='picodo-finetune', config=train_config, mode=wandb_mode, name=run_name)
 
-    # load model
-    print('loading model...')
+    # sharding
     n_tensor_devices = jax.device_count() // n_data_devices
     mesh = jax.make_mesh((n_data_devices, n_tensor_devices), ('data', 'model'))
+    jax.set_mesh(mesh)
+    print('sharding mesh:', ', '.join(f'{k}={v}' for k, v in mesh.shape.items()))
+
+    # load model
+    print('loading model...')
     model, vocab = gemma.load_pretrained(model_variant, mesh, param_dtype, remat)
 
     # optionally use Lora
