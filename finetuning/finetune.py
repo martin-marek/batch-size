@@ -7,7 +7,7 @@ from flax import nnx
 from tqdm.auto import tqdm
 from functools import partial
 from optax import tree_utils as otu
-from jax.sharding import NamedSharding, PartitionSpec as P
+from jax.sharding import AxisType, NamedSharding, PartitionSpec as P
 import optimizer as optimizer_lib
 import gemma, data
 
@@ -84,7 +84,7 @@ def finetune(
 
     # sharding
     n_tensor_devices = jax.device_count() // n_data_devices
-    mesh = jax.make_mesh((n_data_devices, n_tensor_devices), ('data', 'model'))
+    mesh = jax.make_mesh((n_data_devices, n_tensor_devices), ('data', 'model'), axis_types=(AxisType.Auto, AxisType.Auto))
     jax.set_mesh(mesh)
     print('sharding mesh:', ', '.join(f'{k}={v}' for k, v in mesh.shape.items()))
 

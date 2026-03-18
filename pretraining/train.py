@@ -4,6 +4,7 @@ import jax.numpy as jnp
 import optax
 import wandb
 from functools import partial
+from jax.sharding import AxisType
 from flax import nnx
 from optax import tree_utils as otu
 from tqdm.auto import tqdm
@@ -66,7 +67,7 @@ def train_and_evaluate(c: DictConfig):
 
     # sharding
     num_fsdp_devices = jax.device_count() // c.num_tp_devices
-    mesh = jax.make_mesh((num_fsdp_devices, c.num_tp_devices), ('data', 'model'))
+    mesh = jax.make_mesh((num_fsdp_devices, c.num_tp_devices), ('data', 'model'), axis_types=(AxisType.Auto, AxisType.Auto))
     jax.set_mesh(mesh)
     print('sharding mesh:', ', '.join(f'{k}={v}' for k, v in mesh.shape.items()))
 
